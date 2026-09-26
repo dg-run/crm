@@ -1,0 +1,73 @@
+name: auto-acknowledge-issues
+
+on:
+  issues:
+    types: [opened]
+  issue_comment:
+    types: [created]
+
+permissions:
+  issues: write
+
+jobs:
+  reply-new-issue:
+    if: github.event_name == 'issues'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Acknowledge feature request
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            // Don't reply to bot's own issues/comments
+            if (issue.user.type === 'Bot') return;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              body: [
+                `Thanks @${issue.user.login}! 🙏`,
+                ``,
+                `We logged your request — a maintainer (assisted by AI) will reply here shortly with next steps.`,
+                ``,
+                `While you wait:`,
+                `- What problem does this solve for you?`,
+                `- Solo or team? Rough contact count?`,
+                `- Any must-have integration?`,
+                ``,
+                `> Auto-acknowledged by dg-run/crm bot. Human/AI follow-up to come.`
+              ].join('\n'),
+            });
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              labels: ['triage', 'feature-request'],
+            });
+
+  reply-new-comment:
+    if: github.event_name == 'issue_comment'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Acknowledge comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const comment = context.payload.comment;
+            const issue = context.payload.issue;
+            if (!comment || comment.user.type === 'Bot') return;
+            // Avoid replying to our own auto-replies in a loop: only reply once per user comment thread
+            // Simple guard: if comment already contains our marker, skip
+            if ((comment.body || '').includes('Auto-acknowledged by dg-run/crm bot')) return;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              body: [
+                `Thanks @${comment.user.login} — noted! ✅`,
+                ``,
+                `A maintainer (assisted by AI) will answer here shortly. If this is a new feature idea, please add: problem, team size, must-have integration.`,
+                ``,
+                `> Auto-acknowledged by dg-run/crm bot.`
+              ].join('\n'),
+            });
